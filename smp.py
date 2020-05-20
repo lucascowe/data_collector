@@ -134,7 +134,7 @@ def get_msn_url_for_ticker(ticker, force_reload=False):
 
 def get_current_price_msn(ticker):
     web_address = get_msn_url_for_ticker(ticker)
-    print(f"Scraping {web_address} at {datetime.datetime.utcfromtimestamp()}")
+    print(f"Scraping {web_address} at {dt.datetime.now().hour}:{dt.datetime.now().minute}")
     resp = requests.get(web_address)
     soup = bs.BeautifulSoup(resp.text, 'html.parser')
     prices = soup.find('body')
