@@ -29,6 +29,10 @@ data_folder = "data"
 msn_urls_folder = "company_info"
 
 
+def save_day(df):
+    print("saving")
+
+
 def get_company_info(ticker):
     r = requests.get('https://finnhub.io/api/v1/stock/profile2?symbol=' + ticker + '&token=' + key.FINNHUB)
     company_info = open(os.path.join(data_folder, msn_urls_folder, ticker + ".json"), 'r').read()
@@ -67,7 +71,7 @@ def get_financials_reported(ticker, period="annual", accessNumber=None):
         .write(json.dumps(company_info, indent=2, sort_keys=True))
     return company_info
 
-print(f'Financials reported: \n{json.dumps(get_financials_reported("msft"), indent=2, sort_keys=True)}')
+# print(f'Financials reported: \n{json.dumps(get_financials_reported("msft"), indent=2, sort_keys=True)}')
 
 def save_sp500_tickers():
     resp = requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
@@ -207,6 +211,25 @@ def compile_data():
 
     print(main_df.head())
     main_df.to_csv(smp_joined_closes)
+
+
+price_folder = os.path.join("data", "prices")
+
+
+def save_price(prices, ticker, freq):
+    if not os.path.isdir(price_folder):
+        os.mkdir(price_folder)
+    ticker_file_name = f"{ticker}_{freq}min.csv"
+    ticker_path = os.path.join(price_folder, ticker_file_name)
+    try:
+        if os.path.isfile(ticker_path):
+            prices.to_csv(ticker_path, mode='a', header=False)
+        else:
+            prices.to_csv(ticker_path)
+        return True
+    except Exception as e:
+        print(f"Saving prices failed: {e}")
+        raise Exception(f"Save price to {ticker_path} failed: {e}")
 
 
 style.use('ggplot')

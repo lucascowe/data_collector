@@ -1,5 +1,6 @@
 import signal
 import time
+import os
 from flask import Flask, render_template, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
@@ -13,24 +14,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///stock_tracker.db'
 db = SQLAlchemy(app)
 
 
-# def worker_function(thread_num):
-#     last_save = 0
-#     need_commit = False
-#     while True:
-#         for stock in TrackStock.query.all():
-#             try:
-#                 if type(stock.last_checked) is not float or stock.last_checked == 0 or (
-#                         time.time() - stock.last_checked > (stock.frequency * 60)):
-#                     stock = update_price(stock)
-#                     need_commit = True
-#                     print(f"{stock.ticker} updated ${stock.price}")
-#             except:
-#                 print(f"Error: Checking {stock.last_checked} with current time {time.time()}")
-#         if need_commit:
-#             db.session.commit()
-#             need_commit = False
-
-
 def update_price(stock):
     print(f"Updating {stock.ticker} {stock.price} {stock.last_checked}")
     stock.price = smp.get_current_price_msn(stock.ticker)
@@ -38,15 +21,6 @@ def update_price(stock):
     stock.last_check_display = datetime.utcnow()
     print(f"New price {stock.ticker} {stock.price} {stock.last_checked}")
     return stock
-
-
-#
-# def get_price(ticker):
-#     # stock.price = get_current_price_msn(stock.ticker)
-#     # stock.last_checked = time.time()
-#     # stock.last_check_display = datetime.utcnow()
-#     # print(f"{stock.ticker} updated ${stock.price}")
-#     return get_current_price_msn(ticker), float(time.time()), datetime.utcnow()
 
 
 class TrackStock(db.Model):
@@ -71,41 +45,81 @@ class TrackStock(db.Model):
     #     print(f"Added {self.ticker} {self.last_checked} {self.price}")
 
 
-# def save_price(amount):
+
+def seconds_until_market_open():
+    time_now = dt.now()
+    t_min = time_now.minute
+    t_hr = time_now.hour
+    if market_open['hour'] < t_hr < market_close['hour']:
+        return 0
+    if market_open['hour'] == t_hr and market_open['minute'] <= t_min:
+        return 0
+    if market_close['hour'] == t_hr and market_close['minute'] >= t_min:
+        return 0
+    hours = 0
+    minutes = 0
+    adjusted_hour = time_now.hour
+    print(f"time is {time_now.hour}:{time_now.minute}")
+    if t_min > market_close['minute']:
+        minutes += 60 - t_min
+        minutes += market_open['minute']
+        adjusted_hour += 1
+    if t_min < market_open['minute']:
+        minutes += market_open['minute'] - time_now.minute
+    if adjusted_hour > market_close['hour']:
+        hours += 24 - adjusted_hour + market_open['hour']
+    if adjusted_hour < market_open['hour']:
+        hours += market_open['hour'] - adjusted_hour
+    print(f"market closed, waiting {hours} hours and {minutes} minutes")
+    return ((minutes + hours * 60) * 60)
 
 
 def alarm_worker(thread_num, frequency):
     last_save = 0
     need_commit = False
     first_time = True
+    calender_day = None
     while True:
         if first_time:
             # find the 00 seconds
             time.sleep(60 - dt.now().second)
             # find the minute for the frequency
             time.sleep((frequency - (dt.now().minute % frequency)) * 60)
+            calender_day = dt.now().isoweekday()
+            if calender_day > 5:
+                time.sleep((24 - dt.now().hour + 6) * 60 * 60)
+                continue
             first_time = False
         else:
             time.sleep(frequency * 60 - (time.time() - start_time))
+            seconds_to_open = seconds_until_market_open()
+            print(f"seconds to open {seconds_to_open}")
+            if seconds_to_open > 0:
+                time.sleep(seconds_to_open)
+                first_time = True
+                continue
         start_time = time.time()
-        for stock in TrackStock.query.filter(TrackStock.frequency == frequency).all():
+        stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
+        print(f"Getting prices for {len(stocks)}")
+        for stock in stocks:
+            print(f"Checking {stock.ticker}")
+        for stock in stocks:
             try:
                 stock = update_price(stock)
                 need_commit = True
-                print(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}")
+                print(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}\n")
                 ## todo: save price to csv
             except:
                 print(f"Error: Checking {stock.last_checked} with current time {dt.now().hour}:{dt.now().minute}:{dt.now().second}")
         if need_commit:
             db.session.commit()
             need_commit = False
-
-
-# def _handle_minute_alarm(signum, frame):
-#     thread_ctrl.notify_all()
+        print(f"Finished\n\n")
 
 
 # initialize
+market_open = {"hour": 7, "minute": 29}
+market_close = {"hour": 14, "minute": 2}
 frequencies = [1, 5, 10, 15, 30, 60]
 price_thread = []
 # thread_ctrl = Condition()
