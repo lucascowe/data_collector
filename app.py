@@ -100,10 +100,11 @@ def alarm_worker(thread_num, frequency, ctrl):
     day_prices = {}
     current_date = ""
     blank_template = {}
-    time_range = pd.timedelta_range(start=f"{market_open['hour']}:'{market_open['minute']}:00",
-                                    end=f"{market_close['hour']}:'{market_close['minute']}:00",
+    time_range = pd.timedelta_range(start=f"{market_open['hour']}:{market_open['minute']}:00",
+                                    end=f"{market_close['hour']}:{market_close['minute']}:00",
                                     freq=f'{frequency}MIN')
-    col_names = ['date']
+    col_names = []
+    col_names.append('date')
     for i in range(len(time_range)):
         col_names.append(str(time_range[i])[-8:-3])
     blank_df = pd.DataFrame(columns=col_names)
