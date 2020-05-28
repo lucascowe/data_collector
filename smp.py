@@ -53,7 +53,6 @@ def get_company_info(ticker):
 
 def get_financials_reported(ticker, period="annual", accessNumber=None):
     """
-    
     :param accessNumber: report access number
     :param ticker: 
     :param period: annual or quarterly
@@ -71,7 +70,19 @@ def get_financials_reported(ticker, period="annual", accessNumber=None):
         .write(json.dumps(company_info, indent=2, sort_keys=True))
     return company_info
 
+
+def load_financials(ticker):
+    if not os.path.isfile(os.path.join(data_folder, msn_urls_folder, ticker + ".json")):
+        get_company_info(ticker)
+        company_info = get_financials_reported(ticker)
+    else:
+        company_info = open(os.path.join(data_folder, msn_urls_folder, ticker + ".json"), 'r').read()
+        company_info = json.loads(company_info)
+    return company_info
+
+
 # print(f'Financials reported: \n{json.dumps(get_financials_reported("msft"), indent=2, sort_keys=True)}')
+
 
 def save_sp500_tickers():
     resp = requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
@@ -214,22 +225,6 @@ def compile_data():
 
 
 price_folder = os.path.join("data", "prices")
-
-
-def save_price(prices, ticker, freq):
-    if not os.path.isdir(price_folder):
-        os.mkdir(price_folder)
-    ticker_file_name = f"{ticker}_{freq}min.csv"
-    ticker_path = os.path.join(price_folder, ticker_file_name)
-    try:
-        if os.path.isfile(ticker_path):
-            prices.to_csv(ticker_path, mode='a', header=False)
-        else:
-            prices.to_csv(ticker_path)
-        return True
-    except Exception as e:
-        print(f"Saving prices failed: {e}")
-        raise Exception(f"Save price to {ticker_path} failed: {e}")
 
 
 style.use('ggplot')

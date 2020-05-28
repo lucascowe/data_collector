@@ -10,11 +10,20 @@
 
     <div class="form">
         <form action="/update/{{stock.ticker}}" method="POST">
-            <h1>{{stock.name}}</h1>
-            <label id={{ticker
-            <img src={{stock.info.logo}}
-            <input type="int" name="frequency" id="frequency" value="{{stock.frequency}}">
-            <input type="submit" value="Update">
+            <h1>{{stock_info.name}}</h1>
+            <div class="column" id="left_col">
+                <img src={{stock_info.logo}}>
+            </div>
+            <div class="column" id="right_col">
+                <label>Ticker: {{stock_info.ticker}} </label><br>
+                <label>IPO: {{stock_info.ipo}} </label><br>
+                <label>Country: {{stock_info.country}} </label><br>
+                <label>Exchange: {{stock_info.exchange}} </label><br>
+                <label>EPS ({{stock_info.data}}):  </label><br>
+                <label>Price Polling Frequency:</label><br>
+                <input type="int" name="frequency" id="frequency" value="{{stock.frequency}}">
+                <input type="submit" value="Update">
+            </div>
         </form>
     </div>
 </div>

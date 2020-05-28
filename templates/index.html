@@ -24,11 +24,11 @@
                 <td>{{ stock.name }}</td>
                 <td>{{ stock.price }}</td>
                 <td>{{ stock.frequency }}</td>
-                <td>{{ stock.last_check_display }}</td>
+                <td>{{ stock.last_check }}</td>
                 <td>
                     <a href="/delete/{{stock.ticker}}">Delete</a>
                     <br>
-                    <a href="/update/{{stock.ticker}}" stock=stock>Update</a>
+                    <a href="/update/{{stock.ticker}}" stock=stock>Info</a>
                 </td>
             </tr>
         {% endfor %}
@@ -37,8 +37,11 @@
 
     <div class="form">
         <form action="/" method="POST">
-            <input type="text" name="ticker" id="ticker">
-            <input type="int" name="frequency" id="frequency">
+            <label name="ticker_label">Stock Ticker</label>
+            <input type="text" name="ticker" id="ticker_input" align="right">
+            <br>
+            <label name="check_frequency">Frequency (minutes)</label>
+            <input type="int" name="frequency" id="frequency_input">
             <input type="submit" value="Track stock">
         </form>
     </div>

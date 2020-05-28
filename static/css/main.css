@@ -34,3 +34,8 @@ td {
 #content {
     width: 70%;
 }
+
+
+.ticker_input, .frequency_input {
+    align: right;
+}
