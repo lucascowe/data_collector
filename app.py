@@ -85,8 +85,10 @@ def save_prices(ticker, frequency, prices, date, month=dt.now().month, year=dt.n
         filename = f"{ticker}_{month}_{year}_freq_{frequency}.csv"
         file_path = os.path.join(location, filename)
         if os.path.isfile(file_path):
-            prices.loc[[date]].to_csv(file_path, mode='a', header='False')
+            print(f"File existing, saving without header")
+            prices.loc[[date]].to_csv(file_path, mode='a', header=False)
         else:
+            print(f"File not found, creating new")
             prices.to_csv(file_path)
     except Exception as e:
         print(f"Error saving prices to file for {file_path}: {e}")
@@ -128,6 +130,7 @@ def alarm_worker(thread_num, frequency, ctrl):
             print(f"seconds to open {seconds_to_open}")
             if seconds_to_open > 0:
                 for stock_ticker in day_prices.keys():
+                    print(f"Thread {thread_num} is saving prices for {stock_ticker}")
                     save_prices(stock_ticker, frequency, day_prices[stock_ticker], current_date)
                 seconds_to_open = seconds_until_market_open()
                 time.sleep(seconds_to_open)
@@ -136,10 +139,10 @@ def alarm_worker(thread_num, frequency, ctrl):
         start_time = time.time()
         time_key = current_time_str()
         stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
-        if len(stocks > 0):
-            print(f"Getting prices for {len(stocks)}")
+        if len(stocks) > 0:
+            print(f"Getting prices for {len(stocks)} thread {thread_num}")
             for stock in stocks:
-                print(f"Checking {stock.ticker}")
+                print(f"Checking {stock.ticker} thread {thread_num}")
             for stock in stocks:
                 try:
                     stock = update_price(stock)
@@ -153,21 +156,27 @@ def alarm_worker(thread_num, frequency, ctrl):
             if need_commit:
                 db.session.commit()
                 need_commit = False
-            print(f"Finished\n")
+            print(f"Finished thread {thread_num}\n")
         else:
+            ctrl.acquire()
             print(f"No stocks at freq {frequency}, waiting")
             ctrl.wait()
             print(f"New stocks, checking")
 
 
 # initialize
-market_open = {"hour": 7, "minute": 30}
-market_close = {"hour": 14, "minute": 00}
-frequencies = [1, 5, 10, 15, 30, 60]
-price_thread = []
-thread_ctrl = Condition()
-for i in range(len(frequencies)):
-    price_thread.append(Thread(target=alarm_worker, args=(i, frequencies[i], thread_ctrl), daemon=True).start())
+with app.app_context():
+    market_open = {"hour": 7, "minute": 30}
+    # market_open = {"hour": 7, "minute": 20}
+    # market_close = {"hour": 9, "minute": 5}
+    market_close = {"hour": 14, "minute": 00}
+    frequencies = [1, 5, 10, 15, 30, 60]
+    price_threads = []
+    thread_ctrl = Condition()
+    print(f"Initializing")
+    for i in range(len(frequencies)):
+        print(f"Starting thread {i}")
+        price_threads.append(Thread(target=alarm_worker, args=(i, frequencies[i], thread_ctrl), daemon=True).start())
 
 # # signal.signal(signal.SIGALRM, _handle_minute_alarm)
 # signal.signal(signal.alarm(), _handle_minute_alarm)
@@ -244,4 +253,4 @@ def update(id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
