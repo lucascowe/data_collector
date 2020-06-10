@@ -30,6 +30,7 @@ def save_sp500_tickers():
     resp = requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
     soup = bs.BeautifulSoup(resp.text, "lxml")
     table = soup.find('table', {'class': 'wikitable sortable'})
+    print(table)
     tickers = []
     for row in table.findAll('tr')[1:]:
         ticker = row.findAll('td')[0].text
@@ -103,6 +104,16 @@ def get_metrics_data(metric="margin"):
 
 
 # get_metrics_data()
+def graph_candles(ticker):
+    if os.path.exists('stock_dfs/{}.csv'.format(ticker.replace(".", "-"))):
+        print('stock_dfs/{}.csv'.format(ticker.replace(".", "-")))
+        df = pd.read_csv('stock_dfs/{}.csv'.format(ticker.replace(".", "-")))
+
+    df.reset_index(inplace=True)
+    df['Date'] = df['Date'].map(mdates.date2num)
+    df['sma'] = df['Close'].rolling(window=10, min_periods=0).mean()
+
+# graph_candles("AAPL")
 
 def check_etf(ticker, start_date=today(), end_date=today(), cash=10000.00, resolution="D"):
     global currently_bought
@@ -120,10 +131,12 @@ def check_etf(ticker, start_date=today(), end_date=today(), cash=10000.00, resol
     # print(ticker, ":", start_date.date(), "to", end_date.date(), "(", periods, "days)")
     df = web.DataReader(ticker, 'yahoo', start_date, end_date)
     df.reset_index(inplace=True)
-
+    df['Date'] = df['Date'].map(mdates.date2num)
     df['sma'] = df['Close'].rolling(window=10, min_periods=0).mean()
 
+
     print(df.head(15))
+    print(df['Close'])
     r = requests.get('https://finnhub.io/api/v1/indicator?symbol=' + ticker +
                      '&resolution=' + resolution + '&from=' + str(int(start)) + '&to=' + str(int(end)) +
                      '&indicator=sma&timeperiod=10&token=' + key.FINNHUB)
@@ -150,17 +163,18 @@ def check_etf(ticker, start_date=today(), end_date=today(), cash=10000.00, resol
         json.dump(json_r_macd, f)
     df_macd = pd.read_json(r'C:\Users\AC720\PycharmProjects\data_collector\macd.json')
     df_macd['sma'] = df_macd['c'].rolling(window=10, min_periods=0).mean()
-    print(df.head(15))
+    print(df.tail(15))
     print(df_macd)
     # df_macd.head()
     # df_macd.plot()
 
     ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
     ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1)
+    ax1.xaxis_date()
 
-    # candlestick2_ohlc()
+    # candlestick2_ohlc(ax1, df['Open'],df['High'],df['Low'],df['Close'], width=2, colorup='g')
     # ax1.plot(df_macd.index, df_macd['c'])
-    ax1.plot(df_macd.index, df_macd['sma'])
+    # ax1.plot(df_macd.index, df_macd['sma'])
     ax2.bar(df_macd.index, df_macd['macdHist'])
     plt.show()
     # print(json_r_stochastic)
@@ -221,7 +235,7 @@ def check_etf(ticker, start_date=today(), end_date=today(), cash=10000.00, resol
 
     df['sma'].plot()
 
-start_date = dt.datetime(2013,1,1)
+start_date = dt.datetime(2015,1,1)
 end_date = today()
 
 check_etf("VGT",start_date,end_date)
