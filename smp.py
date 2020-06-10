@@ -20,7 +20,7 @@ from matplotlib import style
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-import key
+from key import FINNHUB
 
 ticker_filename = "smp500tickers.pickle"
 stock_dir = "../stocks_prices"
@@ -34,7 +34,7 @@ def save_day(df):
 
 
 def get_company_info(ticker):
-    r = requests.get('https://finnhub.io/api/v1/stock/profile2?symbol=' + ticker + '&token=' + key.FINNHUB)
+    r = requests.get('https://finnhub.io/api/v1/stock/profile2?symbol=' + ticker + '&token=' + FINNHUB)
     company_info = open(os.path.join(data_folder, msn_urls_folder, ticker + ".json"), 'r').read()
     company_info = json.loads(company_info)
     retrieved_info = r.json()
@@ -69,6 +69,7 @@ def get_financials_reported(ticker, period="annual", accessNumber=None):
     open(os.path.join(data_folder, msn_urls_folder, ticker + ".json"), 'w') \
         .write(json.dumps(company_info, indent=2, sort_keys=True))
     return company_info
+
 
 
 def load_financials(ticker):
