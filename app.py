@@ -1,3 +1,4 @@
+import json
 import signal
 import time
 import os
@@ -41,11 +42,16 @@ def seconds_until_market_open():
     time_now = dt.now()
     t_min = time_now.minute
     t_hr = time_now.hour
+    print(f"Market hours {market_open['hour']}:{market_open['minute']} to {market_close['hour']}:{market_close['minute']}")
+    print(f"Checking current time {t_hr}:{t_min}")
     if market_open['hour'] < t_hr < market_close['hour']:
+        print("Open 1")
         return 0
     if market_open['hour'] == t_hr and market_open['minute'] <= t_min:
+        print("Open 2")
         return 0
     if market_close['hour'] == t_hr and market_close['minute'] >= t_min:
+        print("Open 3")
         return 0
     hours = 0
     minutes = 0
@@ -124,18 +130,28 @@ def alarm_worker(thread_num, frequency, ctrl):
                 continue
             first_time = False
             current_date = f"{dt.now().day}/{dt.now().month}/{dt.now().year}"
+            seconds_to_open = seconds_until_market_open()
+            time.sleep(seconds_to_open)
         else:
-            time.sleep(frequency * 60 - (time.time() - start_time))
+            time_left_in_minute = time.time() - start_time
+            if time_left_in_minute > 60:
+                print(f"Too slow, time {time_left_in_minute} with {len(day_prices)} stocks")
+                raise Exception(f"Too slow, time {time_left_in_minute} with {len(day_prices)} stocks")
+            else:
+                time.sleep(frequency * 60 - time_left_in_minute)
             seconds_to_open = seconds_until_market_open()
             print(f"seconds to open {seconds_to_open}")
             if seconds_to_open > 0:
-                for stock_ticker in day_prices.keys():
-                    print(f"Thread {thread_num} is saving prices for {stock_ticker}")
-                    save_prices(stock_ticker, frequency, day_prices[stock_ticker], current_date)
-                seconds_to_open = seconds_until_market_open()
-                time.sleep(seconds_to_open)
-                first_time = True
-                continue
+                if len(day_prices) > 0:
+                    # print backup just incase
+                    print(day_prices)
+                    for stock_ticker in day_prices.keys():
+                        print(f"Thread {thread_num} is saving prices for {stock_ticker}")
+                        save_prices(stock_ticker, frequency, day_prices[stock_ticker], current_date)
+                    seconds_to_open = seconds_until_market_open()
+                    time.sleep(seconds_to_open)
+                    first_time = True
+                    continue
         start_time = time.time()
         time_key = current_time_str()
         stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
@@ -149,8 +165,9 @@ def alarm_worker(thread_num, frequency, ctrl):
                     need_commit = True
                     print(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}\n")
                     if stock.ticker not in day_prices:
-                        day_prices[stock.ticker] = blank_df
+                        day_prices[stock.ticker] = blank_df.copy()
                     day_prices[stock.ticker].loc[current_date, time_key] = stock.price
+                    print(day_prices)
                 except:
                     print(f"Error: Checking {stock.last_checked} with current time {time_key}")
             if need_commit:
@@ -167,9 +184,9 @@ def alarm_worker(thread_num, frequency, ctrl):
 # initialize
 with app.app_context():
     market_open = {"hour": 7, "minute": 30}
-    # market_open = {"hour": 7, "minute": 20}
-    # market_close = {"hour": 9, "minute": 5}
     market_close = {"hour": 14, "minute": 00}
+    # market_open = {"hour": 00, "minute": 00}
+    # market_close = {"hour": 00, "minute": 10}
     frequencies = [1, 5, 10, 15, 30, 60]
     price_threads = []
     thread_ctrl = Condition()
@@ -228,7 +245,27 @@ def delete(id):
         db.session.commit()
         return redirect('/')
     except:
-        return 'There was a problem deleting that task'
+        return
+
+@app.route('/top_movers')
+def add_top_movers():
+    tickers = smp.get_top_movers_yahoo()
+    if len(tickers) > 0:
+        freq = 1
+        for ticker in tickers[:15]:
+            if len(ticker) > 0:
+                price = smp.get_current_price_msn(ticker)
+                company_info = smp.get_company_info(ticker)
+                print(f"Adding {ticker} at price {price}")
+                new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
+                                       name=company_info['name'] if 'name' in company_info else None)
+                print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
+                try:
+                    db.session.add(new_stock)
+                except:
+                    return 'There was an issue adding your task'
+        db.session.commit()
+        return redirect('/')
 
 
 @app.route('/update/<id>', methods=['GET', 'POST'])

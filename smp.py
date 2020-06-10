@@ -54,9 +54,9 @@ def get_company_info(ticker):
 def get_financials_reported(ticker, period="annual", accessNumber=None):
     """
     :param accessNumber: report access number
-    :param ticker: 
+    :param ticker:
     :param period: annual or quarterly
-    :return: 
+    :return:
     """
     r = requests.get('https://finnhub.io/api/v1/stock/financials-reported?symbol=' + ticker +
                      '&freq=' + period + '&token=' + key.FINNHUB)
@@ -81,8 +81,19 @@ def load_financials(ticker):
         company_info = json.loads(company_info)
     return company_info
 
-
-# print(f'Financials reported: \n{json.dumps(get_financials_reported("msft"), indent=2, sort_keys=True)}')
+report_list = []
+# for tic in os.listdir(os.path.join("data", "company_info")):
+#     ticker_name = tic.split('.')[0]
+#     print(f"Checking {ticker_name}")
+#     try:
+#         result = get_financials_reported(ticker_name)
+#         if "data" in result and result["data"]:
+#             report_list.append(ticker_name)
+#             print(f"Found reports")
+#     except Exception as e:
+#         print(f"error getting tic: {e}")
+# open(os.path.join("data", "company_info", "1_companies_with_reports.json")).write(json.dumps({"companies": report_list}))
+# print(f'Financials reported: \n{json.dumps(get_financials_reported("amzn"), indent=2, sort_keys=True)}')
 
 
 def save_sp500_tickers():
@@ -102,6 +113,25 @@ def save_sp500_tickers():
 def get_html_val(line):
     return (str(line).split('>')[1]).split('<')[0]
 
+
+def get_top_movers_yahoo():
+    yahoo_movers_address = "https://finance.yahoo.com/most-active/"
+    resp = requests.get(yahoo_movers_address)
+    soup = bs.BeautifulSoup(resp.text, 'lxml')
+    table = soup.find('table')
+    print(f"Table: {table}")
+    tickers = []
+    for row in table.find_all('tr')[1:]:
+        ticker = row.find_all('td')[0].text
+        print(f"row: {ticker}")
+        ticker = str(ticker).replace(".", "-")
+        tickers.append(ticker[:-1])
+    with open("smp500tickers.pickle", "wb") as f:
+        pickle.dump(tickers, f)
+    return tickers
+
+# print(f"Top movers")
+# get_top_movers_yahoo()
 
 def get_msn_url_for_ticker(ticker, force_reload=False):
     ticker = str(ticker)
@@ -155,7 +185,16 @@ def get_current_price_msn(ticker):
     soup = bs.BeautifulSoup(resp.text, 'html.parser')
     prices = soup.find('body')
     div = prices.find('div', {'class': 'col2 quotedata-livequote'})
-    cur_price = float(get_html_val(div.find('span', {'class': 'currentval'})))
+    # need to add , removal
+    cur_price = get_html_val(div.find('span', {'class': 'currentval'}))
+    if ',' in cur_price:
+        tmp = ""
+        for letter in cur_price:
+            if letter.isnumeric() or letter =='.':
+                tmp += letter
+        cur_price = float(tmp)
+    else:
+        cur_price = float(cur_price)
     print(f"{ticker} price {cur_price}")
     return cur_price
 
