@@ -174,7 +174,7 @@ def check_etfs(ticker, start_date, end_date=today()):
     # df['Signal9'] = ExpMovingAverage(/macd, 9)
     df['MACDHist'] = df['MACD']- df['Signal9']
     df = stochastics(df)
-    df.drop(['High','Low', 'Open','EMA17', 'EMA8', 'MACD', 'Signal9'], 1, inplace=True)
+    df.drop(['High', 'Low', 'Open', 'EMA17', 'EMA8', 'MACD', 'Signal9'], 1, inplace=True)
     df.loc[df['Close'] > df['SMA'], 'SMA_Status'] = "G"
     df.loc[df['Close'] <= df['SMA'], 'SMA_Status'] = "R"
     df.loc[df['MACDHist'] > 0, 'MACD_Status'] = "G"
@@ -183,17 +183,43 @@ def check_etfs(ticker, start_date, end_date=today()):
     df.loc[df['Slow_K'] <= 20, 'Stochast_Status'] = "R"
     df.loc[(df['SMA_Status'] == "G") & (df['MACD_Status'] == "G") & (df['Slow_K'] > 20), 'Stochast_Status'] = "G"
     df.loc[(df['SMA_Status'] == "R") & (df['MACD_Status'] == "R") & (df['Slow_K'] < 80), 'Stochast_Status'] = "R"
-        # df['Status'] = "Buy"
-    # for i in range(17, len(df["Close"])):
-    #     if df['Close'][i] > df['SMA'][i]:
-    #         if df['MACDHist'][i] > 0:
-    #             if df['Slow_K'][i] > 20:
-    #                 df['Status'][i] = 'Bought'
+
+    BUY = False
+    MACD = False
+    STOCK = False
+    SMA = False
+    for ind in df["date"]:
+        if df.loc[ind, df["SMA_Status"]] == 'G':
+            SMA = True
+        else:
+            SMA = False
+        if df.loc[ind, df["MACD_Status"]] == 'G':
+            MACD = True
+        else:
+            MACD = False
+        if df.loc[ind, df["Stochast_Status"]] == 'G':
+            STOCK = True
+        else:
+            STOCK = False
+        if BUY:
+            if not SMA and not MACD and not STOCK:
+                df[ind, 'Status'] = "Sell"
+                BUY = False
+        if not BUY:
+            if SMA and MACD and STOCK:
+                df[ind, 'Status'] = "Buy"
+                BUY = True
+
+
+        # if df['Close'][i] > df['SMA'][i]:
+        #     if df['MACDHist'][i] > 0:
+        #         if df['Slow_K'][i] > 20:
+        #             df['Status'][i] = 'Bought'
 
 
 
     pd.set_option('max_columns', 30)
-    print(df.tail(20))
+    print(df.tail(200))
 
 # check_etfs("VUG", start_date)
 check_etfs("VGT", start_date)
