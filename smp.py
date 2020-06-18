@@ -1,6 +1,7 @@
 import json
 import time
 import datetime
+import urllib.request
 
 import bs4 as bs
 import datetime as dt
@@ -20,7 +21,7 @@ from matplotlib import style
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from key import FINNHUB
+import key
 
 ticker_filename = "smp500tickers.pickle"
 stock_dir = "../stocks_prices"
@@ -34,7 +35,7 @@ def save_day(df):
 
 
 def get_company_info(ticker):
-    r = requests.get('https://finnhub.io/api/v1/stock/profile2?symbol=' + ticker + '&token=' + FINNHUB)
+    r = requests.get('https://finnhub.io/api/v1/stock/profile2?symbol=' + ticker + '&token=' + key.FINNHUB)
     company_info = open(os.path.join(data_folder, msn_urls_folder, ticker + ".json"), 'r').read()
     company_info = json.loads(company_info)
     retrieved_info = r.json()
@@ -114,6 +115,17 @@ def get_html_val(line):
     return (str(line).split('>')[1]).split('<')[0]
 
 
+def get_day_prices_bloomberg(ticker):
+    user_agent = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_4; en-US) AppleWebKit/534.3 (KHTML, like Gecko) Chrome/6.0.472.63 Safari/534.3'
+    headers = {'User-Agent': user_agent}
+    bloomberg_url = f"https://www.bloomberg.com/markets/api/bulk-time-series/price/{ticker}%3AUS?timeFrame=1_DAY"
+    req = urllib.request.Request(bloomberg_url, None, {'User-agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5'})
+    page = urllib.request.urlopen(req)
+    data = json.loads(page.read().decode('ascii'))
+    # print(f"{json.dumps(data, indent=2)}")
+    return data
+
+
 def get_top_movers_yahoo():
     yahoo_movers_address = "https://finance.yahoo.com/most-active/"
     resp = requests.get(yahoo_movers_address)
@@ -130,8 +142,12 @@ def get_top_movers_yahoo():
         pickle.dump(tickers, f)
     return tickers
 
-# print(f"Top movers")
-# get_top_movers_yahoo()
+
+print(f"Top movers")
+top_movers = get_top_movers_yahoo()
+for ticker in top_movers:
+    get_day_prices_bloomberg(ticker)
+
 
 def get_msn_url_for_ticker(ticker, force_reload=False):
     ticker = str(ticker)
