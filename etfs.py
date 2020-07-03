@@ -63,7 +63,30 @@ def save_us_etf_tickers():
 
 # print(save_us_etf_tickers())
 
+start_date = dt.datetime(2017,1,1).date()
+
+
+def get_individual_stock_data(ticker, start, end = today()):
+
+
+    if not os.path.exists('us_etf_dfs/{}.csv'.format(ticker)):
+        try:
+            print('us_etf_dfs/{}.csv'.format(ticker))
+            df = web.DataReader(ticker, 'yahoo', start, end)
+            df.to_csv('us_etf_dfs/{}.csv'.format(ticker))
+        except:
+            print("Error finding " + ticker)
+    else:
+        if os.path.isfile('us_etf_dfs/{}.csv'.format(ticker)):
+            print(f"File existing, saving without header")
+            df.to_csv('us_etf_dfs/{}.csv'.format(ticker), mode='a', header=False)
+        else:
+            print('Already have {}'.format(ticker))
+
+# get_individual_stock_data("SPY", start_date)
+
 def get_data_from_yahoo(reload_etf=True):
+
     if reload_etf:
         tickers = save_us_etf_tickers()
     else:
@@ -73,7 +96,7 @@ def get_data_from_yahoo(reload_etf=True):
     if not os.path.exists('us_etf_dfs'):
         os.makedirs('us_etf_dfs')
 
-    start = dt.datetime(2020, 1, 1)
+    start = start_date
     end = today()
 
     for ticker in tickers:
@@ -87,7 +110,11 @@ def get_data_from_yahoo(reload_etf=True):
             except:
                 print("Error finding " + ticker)
         else:
-            print('Already have {}'.format(ticker))
+            if os.path.isfile('us_etf_dfs/{}.csv'.format(ticker)):
+                print(f"File existing, saving without header")
+                df.to_csv('us_etf_dfs/{}.csv'.format(ticker), mode='a', header=False)
+            else:
+                print('Already have {}'.format(ticker))
 
 
 # get_data_from_yahoo()
@@ -137,11 +164,11 @@ def calc_days(start_date, end_date):
     else:
         return date_range.days
 
-def save_data(ticker, df, location="etf_arrow_working"):
+def save_data(filename, df, location="etf_arrow_working"):
     try:
         if not os.path.isdir(location):
             os.mkdir(location)
-        filename = f"{ticker}_arrow.csv"
+        filename = f"{filename}.csv"
         file_path = os.path.join(location, filename)
         if os.path.isfile(file_path):
             print(f"File existing, saving without header")
@@ -153,11 +180,10 @@ def save_data(ticker, df, location="etf_arrow_working"):
         print(f"Error saving prices to file for {file_path}: {e}")
 
 
-def check_etf(ticker, start_date, end_date=today()):
+def check_etf(ticker, start_date, end_date=today(), macd_f=8, macd_s=17):
 
     main_df = pd.DataFrame
     df = pd.read_csv('us_etf_dfs/{}.csv'.format(ticker))
-
     df['%Volatil'] = round((df['High']-df['Close'])/df['Open']*100,2)
     # df.drop(['Open', 'High', 'Low', 'Adj Close', 'Volume'], 1, inplace=True)
     df['SMA'] = df['Close'].rolling(window=10, min_periods=0).mean()
@@ -168,30 +194,44 @@ def check_etf(ticker, start_date, end_date=today()):
     df['MACDHist'] = df['MACD'] - df['Signal9']
     df = stochastics(df)
     # df.drop(['High', 'Low', 'Open', 'Volume', 'Adj Close', 'EMA17', 'EMA8', 'MACD', 'Signal9', '%Volatil'], 1, inplace=True)
-    perform_df = pd.DataFrame(columns=['Year', '1st_Open', 'Fin_Close', 'Shares', 'Cash', 'Tot_Val', 'T_ARORC', 'H_ARORC', 'Buys', 'Sells'])
+    perform_df = pd.DataFrame(columns=['Year', 'Start_$', '1st_Open', 'Fin_Close', 'Shares', 'Cash', 'Tot_Val', 'T_ARORC', 'H_ARORC', 'Buys', 'Sells', 'Days'])
     perform_df.set_index('Year', inplace=True)
     start_index = 0
-    starting_cash = 10000.0
+    original_cash = 10000.0
+    starting_cash = original_cash
     currently_bought = False
     col_names = ['Date','Action','Total_Val','Shares','Cash','Close','SMA','MACDHist','SlowK']
     buys_sells_df = pd.DataFrame(columns=col_names)
     buys_sells_df.set_index('Date', inplace=True)
-    for ind in df.index:
-        if dt.datetime(int(df.loc[ind, "Date"][0:4]), int(df.loc[ind, "Date"][5:-3]), int(df.loc[ind, "Date"][8:])) >= start_date:
-            if start_index == 0:
-                start_index = ind
-                year = int(df.loc[ind, 'Date'][0:4])
-                perform_df.loc[year, '1st_Open'] = df.loc[ind, "Open"]
-                perform_df.loc[year, 'Cash'] = starting_cash
 
+    monthly_df = df
+    # df['Date'] = pd.to_datetime(df['Date'])
+
+    for ind in df.index:
+        # print("test", df.loc[ind])
+        if dt.datetime(int(df.loc[ind, "Date"][0:4]), int(df.loc[ind, "Date"][5:-3]), int(df.loc[ind, "Date"][8:])).date() >= start_date:
+        # if df.loc[ind, "Date"] >= start_date:
+            if start_index == 0:
+
+                start_index = ind
+                year_start_index = ind
+                year = int(df.loc[ind, 'Date'][:4])
+                # print (df.loc[ind, 'Date'])
+                # year = year.Year
+                perform_df.loc[year, '1st_Open'] = df.loc[ind, "Open"]
+                perform_df.loc[year, 'Start_$'] = starting_cash
+                perform_df.loc[year, 'Cash'] = starting_cash
+                perform_df.loc[year, 'Buys'] = 0
+                perform_df.loc[year, 'Sells'] = 0
             elif year != int(df.loc[ind, 'Date'][0:4]):
                 perform_df.loc[year, 'Fin_Close'] = df.loc[ind - 1, "Close"]
-                date_range = calc_days(df.loc[start_index, "Date"],df.loc[ind-1, "Date"])
-
+                date_range = calc_days(df.loc[year_start_index, "Date"],df.loc[ind-1, "Date"])
+                perform_df.loc[year, 'Days'] = calc_days(df.loc[year_start_index, "Date"], df.loc[ind, "Date"])
                 perform_df.loc[year, 'H_ARORC'] = round(((perform_df.loc[year, 'Fin_Close'] - perform_df.loc[year, '1st_Open'])
-                                                         / perform_df.loc[year, '1st_Open'] * (date_range / 365)) * 100, 1)
-                perform_df.loc[year, 'T_ARORC'] = round((perform_df.loc[year, 'Tot_Val'] - starting_cash) / starting_cash *
-                                                        (date_range / 365) * 100, 1)
+                                                         / perform_df.loc[year, '1st_Open'] * (perform_df.loc[year, 'Days'] / 365)) * 100, 1)
+                perform_df.loc[year, 'T_ARORC'] = round((perform_df.loc[year, 'Tot_Val'] - df.loc[year_start_index - 1, "Close"])
+                                                        / df.loc[year_start_index, "Close"] * (perform_df.loc[year, 'Days'] / 365) * 100, 1)
+
 
                 # Set new year
                 starting_cash = perform_df.loc[year, 'Tot_Val']
@@ -202,7 +242,7 @@ def check_etf(ticker, start_date, end_date=today()):
                 perform_df.loc[year, 'Tot_Val'] = perform_df.loc[year - 1, 'Tot_Val']
                 perform_df.loc[year, 'Buys'] = 0
                 perform_df.loc[year, 'Sells'] = 0
-                start_index = ind
+                year_start_index = ind
 
             if not currently_bought:
                 if df.loc[ind, "SMA"] < df.loc[ind, "Close"]:
@@ -235,25 +275,26 @@ def check_etf(ticker, start_date, end_date=today()):
                                 # print("Shares:", shares, "@", round(df.loc[ind, "Close"], 2), " + $", round(cash, 2),
                                 #       "Total Value $", round(total_val, 2))
                                 buys_sells_df.loc[df.loc[ind, "Date"]] = 'Sell', perform_df.iloc[-1]['Tot_Val'], \
-                                                                         perform_df.loc[year, 'Shares'], perform_df.loc[
-                                                                             year, 'Cash'], df.loc[ind, 'Close'], \
-                                                                         df.loc[ind, 'SMA'], df.loc[ind, 'MACDHist'], \
-                                                                         df.loc[ind, 'Slow_K']
+                                            perform_df.loc[year, 'Shares'], perform_df.loc[year, 'Cash'], df.loc[ind, 'Close'], \
+                                            df.loc[ind, 'SMA'], df.loc[ind, 'MACDHist'], df.loc[ind, 'Slow_K']
 
     perform_df.loc[year, 'Fin_Close'] = df.loc[ind, "Close"]
-    date_range = calc_days(df.loc[start_index, "Date"], df.loc[ind, "Date"])
+    perform_df.loc[year, 'Days'] = calc_days(df.loc[year_start_index, "Date"], df.loc[ind, "Date"])
+    # date_range = calc_days(df.loc[year_start_index, "Date"], df.loc[ind, "Date"])
 
     perform_df.loc[year, 'H_ARORC'] = round(((perform_df.loc[year, 'Fin_Close'] - perform_df.loc[year, '1st_Open'])
-                                             / perform_df.loc[year, '1st_Open'] * (date_range / 365)) * 100, 1)
-    perform_df.loc[year, 'T_ARORC'] = round((perform_df.loc[year, 'Tot_Val'] - starting_cash) / starting_cash *
-                                            (date_range / 365) * 100, 1)
+                                             / perform_df.loc[year, '1st_Open'] * (perform_df.loc[year, 'Days'] / 365)) * 100, 1)
+    perform_df.loc[year, 'T_ARORC'] = round((perform_df.loc[year, 'Tot_Val'] - perform_df.loc[year, 'Start_$']) / perform_df.loc[year, 'Start_$'] *
+                                            (perform_df.loc[year, 'Days'] / 365) * 100, 1)
 
     perform_df.fillna(0, inplace=True)
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(perform_df)
-    hold_final = round(math.floor(starting_cash / df.iloc[0]["Close"]) * df.iloc[-1]["Close"] +
-          starting_cash - (math.floor(starting_cash / df.iloc[0]["Close"]) * df.iloc[0]["Close"]),2)
+    print(ticker)
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    #     print(perform_df)
 
+    hold_final = round(math.floor(original_cash / df.iloc[0]["Close"]) * df.iloc[-1]["Close"] +
+          starting_cash - (math.floor(starting_cash / df.iloc[0]["Close"]) * df.iloc[0]["Close"]),2)
+    save_data(ticker + '_YOY_summary', perform_df, 'etfs_yoy')
     date_range = calc_days(df.iloc[0]['Date'], df.iloc[-1]['Date'])
     if hold_final > perform_df.iloc[-1]['Tot_Val']:
         best_method = "hold"
@@ -261,27 +302,36 @@ def check_etf(ticker, start_date, end_date=today()):
         best_method = "Arrows"
     hold_arorc = round((hold_final - starting_cash) / starting_cash * (date_range / 365) * 100)
     arrows_arorc = round((perform_df.iloc[-1]['Tot_Val'] - starting_cash) / starting_cash * (date_range / 365) * 100)
-    save_data(ticker, buys_sells_df)
+    save_data(ticker + "_arrows", buys_sells_df)
 
-    print(perform_df.iloc[0]['1st_Open'])
-    print(perform_df.iloc[-1]['Fin_Close'])
+    # print(perform_df.iloc[0]['1st_Open'])
+    # print(perform_df.iloc[-1]['Fin_Close'])
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     #     print(buys_sells_df)
-    print(perform_df['Buys'].sum())
-    return best_method, start_date.date(), df.loc[start_index, "Close"],df.loc[ind, "Date"], df.loc[ind, "Close"],\
+    # print(starting_cash)
+    return best_method, df.loc[start_index, "Date"], df.loc[start_index, "Close"],df.loc[ind, "Date"], df.loc[ind, "Close"],\
            hold_final, starting_cash,hold_arorc, perform_df.iloc[-1]['Tot_Val'], round(arrows_arorc,2), \
            perform_df['Buys'].sum(), perform_df['Sells'].sum()
 
-start_date = dt.datetime(2019,1,1)
 
-print(check_etf("SPY", start_date))
-# check_etf("VOO", start_date)
-# check_etf("VGT", start_date)
-# check_etf("SPY", start_date)
-# check_etf("RSP",start_date)
-# check_etf("VV",start_date)
-# check_etf("MGV",start_date)
-# check_etf("VAP", start_date)
+start_date = dt.datetime(2000,1,1).date()
+
+def macd_variations_etf_check(ticker):
+
+    col_names = ['Ticker', 'Best_Method', 'Start', 'Str_Close', 'Finish', 'Fin_Close', 'Start_$', 'Hold_$',
+                 'Hold_ARORC', 'Arrows_$', 'Arrows ARORC', 'Buys', 'Sells']
+
+    summary_df = pd.DataFrame(columns=col_names)
+    summary_df.set_index('Ticker', inplace=True)
+
+    for f in range(3, 13):
+        for s in range(14, 29):
+            print('f=', f, 's=', s, check_etf("SPY", start_date, today(), f, s))
+            summary_df.loc[ticker+' f=' + f + ' s=' + s]
+
+
+macd_variations_etf_check('SPY')
+# print(check_etf("SPY", start_date))
 
 def compile_data(test = False):
     with open("us_etfs.pickle","rb") as f:
@@ -309,10 +359,34 @@ def compile_data(test = False):
         # df.set_index('Date', inplace=True)
         # df.rename()
 
+    print(summary_df)
 
-
+    save_data('us_etfs_summary', summary_df)
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
         print(summary_df)
 
 
-# compile_data(True)
+# compile_data()
+
+def compile_individual_etf(ticker):
+    col_names = ['Ticker', 'Best_Method', 'Start', 'Str_Close', 'Finish', 'Fin_Close', 'Start_$', 'Hold_$',
+                 'Hold_ARORC', 'Arrows_$', 'Arrows ARORC', 'Buys', 'Sells']
+
+    summary_df = pd.DataFrame(columns=col_names)
+    summary_df.set_index('Ticker', inplace=True)
+
+    try:
+        summary_df.loc[ticker] = check_etf(ticker, start_date)
+        # i += 1
+        # if test and i == 5:
+        #     return "Done"
+
+
+    except:
+        print("Error on ", ticker)
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
+        print(summary_df)
+
+    save_data('us_etfs_summary', summary_df, 'etf_summary')
+
+compile_individual_etf('SPY')
