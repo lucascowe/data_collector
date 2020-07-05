@@ -16,6 +16,8 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///track_list.db'
 db = SQLAlchemy(app)
 
+TOP_MOVERS = "top_movers"
+
 
 def update_price(stock):
     print(f"Updating {stock.ticker} {stock.price} {stock.last_checked}")
@@ -38,11 +40,19 @@ class TrackStock(db.Model):
         return f"Added {self.ticker} {self.last_checked} {self.price}"
 
 
+def two_digit_number(number):
+    if number < 10:
+        return f"0{number}"
+    else:
+        return number
+
+
 def seconds_until_market_open():
     time_now = dt.now()
     t_min = time_now.minute
     t_hr = time_now.hour
-    print(f"Market hours {market_open['hour']}:{market_open['minute']} to {market_close['hour']}:{market_close['minute']}")
+    print(f"Market hours {market_open['hour']}:{two_digit_number(market_open['minute'])} to {market_close['hour']}:"
+          f"{two_digit_number(market_close['minute'])}")
     print(f"Checking current time {t_hr}:{t_min}")
     if market_open['hour'] < t_hr < market_close['hour']:
         print("Open 1")
@@ -56,7 +66,7 @@ def seconds_until_market_open():
     hours = 0
     minutes = 0
     adjusted_hour = time_now.hour
-    print(f"time is {time_now.hour}:{time_now.minute}")
+    print(f"time is {time_now.hour}:{two_digit_number(time_now.minute)}")
     if t_min > market_close['minute']:
         minutes += 60 - t_min
         minutes += market_open['minute']
@@ -101,22 +111,35 @@ def save_prices(ticker, frequency, prices, date, month=dt.now().month, year=dt.n
 
 
 def alarm_worker(thread_num, frequency, ctrl):
+    print(f"Thread {thread_num} is alive")
     last_save = 0
     need_commit = False
     first_time = True
     calender_day = None
     day_prices = {}
+    day_movers = {}
     current_date = ""
     blank_template = {}
     time_range = pd.timedelta_range(start=f"{market_open['hour']}:{market_open['minute']}:00",
                                     end=f"{market_close['hour']}:{market_close['minute']}:00",
                                     freq=f'{frequency}MIN')
+
+    # define data sets
     col_names = []
-    col_names.append('date')
-    for i in range(len(time_range)):
-        col_names.append(str(time_range[i])[-8:-3])
-    blank_df = pd.DataFrame(columns=col_names)
-    blank_df.set_index('date', inplace=True)
+    if thread_num == TOP_MOVERS:
+        col_names.append('ticker')
+        for i in range(len(time_range)):
+            col_names.append(str(time_range[i])[-8:-3])
+        blank_df = pd.DataFrame(columns=col_names)
+        blank_df.set_index('ticker', inplace=True)
+        just_tickers = pd.DataFrame(columns=col_names[1:])
+
+    else:
+        col_names.append('date')
+        for i in range(len(time_range)):
+            col_names.append(str(time_range[i])[-8:-3])
+        blank_df = pd.DataFrame(columns=col_names)
+        blank_df.set_index('date', inplace=True)
 
     while True:
         if first_time:
@@ -129,9 +152,12 @@ def alarm_worker(thread_num, frequency, ctrl):
                 time.sleep((24 - dt.now().hour + 4) * 60 * 60)
                 continue
             first_time = False
-            current_date = f"{dt.now().day}/{dt.now().month}/{dt.now().year}"
+            current_date = f"{dt.now().day}-{dt.now().month}-{dt.now().year}"
             seconds_to_open = seconds_until_market_open()
             time.sleep(seconds_to_open)
+            if thread_num == TOP_MOVERS:
+                movers_df = just_tickers.copy()
+                movers_ordered_df = blank_df.copy()
         else:
             time_left_in_minute = time.time() - start_time
             if time_left_in_minute > 60:
@@ -144,7 +170,7 @@ def alarm_worker(thread_num, frequency, ctrl):
             if seconds_to_open > 0:
                 if len(day_prices) > 0:
                     # print backup just incase
-                    print(day_prices)
+                    # print(day_prices)
                     for stock_ticker in day_prices.keys():
                         print(f"Thread {thread_num} is saving prices for {stock_ticker}")
                         save_prices(stock_ticker, frequency, day_prices[stock_ticker], current_date)
@@ -154,31 +180,46 @@ def alarm_worker(thread_num, frequency, ctrl):
                     continue
         start_time = time.time()
         time_key = current_time_str()
-        stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
-        if len(stocks) > 0:
-            print(f"Getting prices for {len(stocks)} thread {thread_num}")
-            for stock in stocks:
-                print(f"Checking {stock.ticker} thread {thread_num}")
-            for stock in stocks:
-                try:
-                    stock = update_price(stock)
-                    need_commit = True
-                    print(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}\n")
-                    if stock.ticker not in day_prices:
-                        day_prices[stock.ticker] = blank_df.copy()
-                    day_prices[stock.ticker].loc[current_date, time_key] = stock.price
-                    print(day_prices)
-                except:
-                    print(f"Error: Checking {stock.last_checked} with current time {time_key}")
-            if need_commit:
-                db.session.commit()
-                need_commit = False
-            print(f"Finished thread {thread_num}\n")
+        print(f"Thread {thread_num} is running")
+        if thread_num == TOP_MOVERS:
+            # top movers thread
+            # dataset rows of companies, columns of times, each set contains one day
+            list_of_movers = smp.get_top_movers_yahoo()
+            print(f"Top movers at {time_key}: {str(list_of_movers)}")
+            movers_df[time_key] = list_of_movers[:len(movers_df) if len(movers_df) > 0 else len(list_of_movers)]
+            day_movers[time_key] = list_of_movers
+            print(f"movers df: {movers_df}")
+            movers_df.to_csv(os.path.join("data", f"movers_{current_date}.csv"))
+            with open(os.path.join("data", f"movers_{current_date}.json"), 'w') as f:
+                f.write(json.dumps(day_movers, indent=2))
+            # look up prices for all top movers and find percent change
+            # for tic in list_of_movers[:5]:
         else:
-            ctrl.acquire()
-            print(f"No stocks at freq {frequency}, waiting")
-            ctrl.wait()
-            print(f"New stocks, checking")
+            stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
+            if len(stocks) > 0:
+                print(f"Getting prices for {len(stocks)} thread {thread_num}")
+                for stock in stocks:
+                    print(f"Checking {stock.ticker} thread {thread_num}")
+                for stock in stocks:
+                    try:
+                        stock = update_price(stock)
+                        need_commit = True
+                        print(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}\n")
+                        if stock.ticker not in day_prices:
+                            day_prices[stock.ticker] = blank_df.copy()
+                        day_prices[stock.ticker].loc[current_date, time_key] = stock.price
+                        # print(day_prices)
+                    except:
+                        print(f"Error: Checking {stock.last_checked} with current time {time_key}")
+                if need_commit:
+                    db.session.commit()
+                    need_commit = False
+                print(f"Finished thread {thread_num}\n")
+            else:
+                ctrl.acquire()
+                print(f"No stocks at freq {frequency}, waiting")
+                ctrl.wait()
+                print(f"New stocks, checking")
 
 
 # initialize
@@ -194,6 +235,7 @@ with app.app_context():
     for i in range(len(frequencies)):
         print(f"Starting thread {i}")
         price_threads.append(Thread(target=alarm_worker, args=(i, frequencies[i], thread_ctrl), daemon=True).start())
+    top_mover_thread = Thread(target=alarm_worker, args=(TOP_MOVERS, 5, thread_ctrl), daemon=True).start()
 
 # # signal.signal(signal.SIGALRM, _handle_minute_alarm)
 # signal.signal(signal.alarm(), _handle_minute_alarm)

@@ -116,13 +116,16 @@ def get_html_val(line):
 
 
 def get_day_prices_bloomberg(ticker):
-    user_agent = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_4; en-US) AppleWebKit/534.3 (KHTML, like Gecko) Chrome/6.0.472.63 Safari/534.3'
-    headers = {'User-Agent': user_agent}
-    bloomberg_url = f"https://www.bloomberg.com/markets/api/bulk-time-series/price/{ticker}%3AUS?timeFrame=1_DAY"
-    req = urllib.request.Request(bloomberg_url, None, {'User-agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5'})
-    page = urllib.request.urlopen(req)
-    data = json.loads(page.read().decode('ascii'))
-    # print(f"{json.dumps(data, indent=2)}")
+    try:
+        user_agent = 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_4; en-US) AppleWebKit/534.3 (KHTML, like Gecko) Chrome/6.0.472.63 Safari/534.3'
+        headers = {'User-Agent': user_agent}
+        bloomberg_url = f"https://www.bloomberg.com/markets/api/bulk-time-series/price/{ticker}%3AUS?timeFrame=1_DAY"
+        req = urllib.request.Request(bloomberg_url, None, {'User-agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; de; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5'})
+        page = urllib.request.urlopen(req)
+        data = json.loads(page.read().decode('ascii'))
+        # print(f"{json.dumps(data, indent=2)}")
+    except Exception as e:
+        print(f"Error getting bloomberg prices: {e}")
     return data
 
 
@@ -131,22 +134,23 @@ def get_top_movers_yahoo():
     resp = requests.get(yahoo_movers_address)
     soup = bs.BeautifulSoup(resp.text, 'lxml')
     table = soup.find('table')
-    print(f"Table: {table}")
+    # print(f"Table: {table}")
     tickers = []
     for row in table.find_all('tr')[1:]:
         ticker = row.find_all('td')[0].text
-        print(f"row: {ticker}")
+        # print(f"row: {ticker}")
         ticker = str(ticker).replace(".", "-")
-        tickers.append(ticker[:-1])
-    with open("smp500tickers.pickle", "wb") as f:
-        pickle.dump(tickers, f)
+        if ticker != "":
+            tickers.append(ticker[:-1])
+    # with open("smp500tickers.pickle", "wb") as f:
+    #     pickle.dump(tickers, f)
     return tickers
 
 
-print(f"Top movers")
-top_movers = get_top_movers_yahoo()
-for ticker in top_movers:
-    get_day_prices_bloomberg(ticker)
+# print(f"Top movers")
+# top_movers = get_top_movers_yahoo()
+# for ticker in top_movers:
+#     get_day_prices_bloomberg(ticker)
 
 
 def get_msn_url_for_ticker(ticker, force_reload=False):
