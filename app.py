@@ -168,7 +168,7 @@ def alarm_worker(thread_num, frequency, ctrl):
             seconds_to_open = seconds_until_market_open()
             print(f"seconds to open {seconds_to_open}")
             if seconds_to_open > 0:
-                if len(day_prices) > 0:
+                if len(day_prices) > 0 or thread_num == "top_movers":
                     # print backup just incase
                     # print(day_prices)
                     for stock_ticker in day_prices.keys():
@@ -186,7 +186,10 @@ def alarm_worker(thread_num, frequency, ctrl):
             # dataset rows of companies, columns of times, each set contains one day
             list_of_movers = smp.get_top_movers_yahoo()
             print(f"Top movers at {time_key}: {str(list_of_movers)}")
-            movers_df[time_key] = list_of_movers[:len(movers_df) if len(movers_df) > 0 else len(list_of_movers)]
+            try:
+                movers_df[time_key] = list_of_movers[:len(movers_df) if len(movers_df) > 0 else len(list_of_movers)]
+            except Exception as e:
+                print(f"Error: {e}")
             day_movers[time_key] = list_of_movers
             print(f"movers df: {movers_df}")
             movers_df.to_csv(os.path.join("data", f"movers_{current_date}.csv"))
@@ -243,6 +246,12 @@ with app.app_context():
 #     if dt.now().second == 0:
 #         signal.alarm(60)
 #         break
+
+
+@app.route('/what', methods=['POST', 'GET', 'PUT'])
+def what():
+    print(f"callback")
+    return "", 200
 
 
 @app.route('/', methods=['POST', 'GET'])

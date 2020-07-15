@@ -130,20 +130,23 @@ def get_day_prices_bloomberg(ticker):
 
 
 def get_top_movers_yahoo():
-    yahoo_movers_address = "https://finance.yahoo.com/most-active/"
-    resp = requests.get(yahoo_movers_address)
-    soup = bs.BeautifulSoup(resp.text, 'lxml')
-    table = soup.find('table')
-    # print(f"Table: {table}")
     tickers = []
-    for row in table.find_all('tr')[1:]:
-        ticker = row.find_all('td')[0].text
-        # print(f"row: {ticker}")
-        ticker = str(ticker).replace(".", "-")
-        if ticker != "":
-            tickers.append(ticker[:-1])
-    # with open("smp500tickers.pickle", "wb") as f:
-    #     pickle.dump(tickers, f)
+    try:
+        yahoo_movers_address = "https://finance.yahoo.com/most-active/"
+        resp = requests.get(yahoo_movers_address, timeout=10)
+        soup = bs.BeautifulSoup(resp.text, 'lxml')
+        table = soup.find('table')
+        # print(f"Table: {table}")
+        for row in table.find_all('tr')[1:]:
+            ticker = row.find_all('td')[0].text
+            # print(f"row: {ticker}")
+            ticker = str(ticker).replace(".", "-")
+            if ticker != "":
+                tickers.append(ticker[:-1])
+        # with open("smp500tickers.pickle", "wb") as f:
+        #     pickle.dump(tickers, f)
+    except Exception as e:
+        print(f"ERROR: get_top_movers_yahoo: {e}")
     return tickers
 
 
