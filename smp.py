@@ -169,7 +169,7 @@ def get_msn_url_for_ticker(ticker, force_reload=False):
                 if ticker_info["msn_url"] != msn_address:
                     print(f"{ticker} -> {ticker_info['msn_url']}")
                     return ticker_info["msn_url"]
-    chrome_driver = os.path.join("C:\\", "webdrivers", "bin", "chromedriver.exe")
+    chrome_driver = os.path.join("chromedriver")
     # print(f"location is {chrome_driver}")
     chrome_options = Options()
     chrome_options.add_argument("--headless")

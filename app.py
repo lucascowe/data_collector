@@ -250,8 +250,11 @@ with app.app_context():
 
 @app.route('/what', methods=['POST', 'GET', 'PUT'])
 def what():
-    print(f"callback")
-    return "", 200
+    print(f"callback:\n{json.dumps(request.json())}")
+    with open(f"data/tda_{str(datetime.now())}.json", 'w') as fo:
+        fo.write(json.dumps(request.json(), indent=2))
+
+    return {"status": "received"}, 200
 
 
 @app.route('/', methods=['POST', 'GET'])
