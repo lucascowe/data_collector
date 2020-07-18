@@ -13,8 +13,8 @@ from threading import Condition
 from datetime import datetime as dt
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///track_list.db'
-db = SQLAlchemy(app)
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///track_list.db'
+# db = SQLAlchemy(app)
 
 TOP_MOVERS = "top_movers"
 
@@ -29,15 +29,15 @@ def update_price(stock):
     return stock
 
 
-class TrackStock(db.Model):
-    ticker = db.Column(db.String(5), primary_key=True)
-    name = db.Column(db.String(30), nullable=False, default="Needs name")
-    frequency = db.Column(db.Integer, default=1)
-    last_checked = db.Column(db.String(40), default="unknown")
-    price = db.Column(db.Float, default=0)
-
-    def __repr__(self):
-        return f"Added {self.ticker} {self.last_checked} {self.price}"
+# class TrackStock(db.Model):
+#     ticker = db.Column(db.String(5), primary_key=True)
+#     name = db.Column(db.String(30), nullable=False, default="Needs name")
+#     frequency = db.Column(db.Integer, default=1)
+#     last_checked = db.Column(db.String(40), default="unknown")
+#     price = db.Column(db.Float, default=0)
+#
+#     def __repr__(self):
+#         return f"Added {self.ticker} {self.last_checked} {self.price}"
 
 
 def two_digit_number(number):
@@ -198,7 +198,8 @@ def alarm_worker(thread_num, frequency, ctrl):
             # look up prices for all top movers and find percent change
             # for tic in list_of_movers[:5]:
         else:
-            stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
+            # stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
+            stocks = []
             if len(stocks) > 0:
                 print(f"Getting prices for {len(stocks)} thread {thread_num}")
                 for stock in stocks:
@@ -215,7 +216,7 @@ def alarm_worker(thread_num, frequency, ctrl):
                     except:
                         print(f"Error: Checking {stock.last_checked} with current time {time_key}")
                 if need_commit:
-                    db.session.commit()
+                    # db.session.commit()
                     need_commit = False
                 print(f"Finished thread {thread_num}\n")
             else:
@@ -248,11 +249,11 @@ with app.app_context():
 #         break
 
 
-@app.route('/what', methods=['POST', 'GET', 'PUT'])
-def what():
-    print(f"callback:\n{json.dumps(request.json())}")
-    with open(f"data/tda_{str(datetime.now())}.json", 'w') as fo:
-        fo.write(json.dumps(request.json(), indent=2))
+@app.route('/track', methods=['POST', 'GET', 'PUT'])
+def track():
+    print(f"callback:\n{request}")
+    # with open(f"data/tda_{str(datetime.now())}.json", 'w') as fo:
+    #     fo.write(json.dumps(request.json(), indent=2))
 
     return {"status": "received"}, 200
 
@@ -273,74 +274,75 @@ def index():
             price = smp.get_current_price_msn(ticker)
             company_info = smp.get_company_info(ticker)
             print(f"Adding {ticker} at price {price}")
-            new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
-                                   name=company_info['name'] if 'name' in company_info else None)
-            print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
-            try:
-                db.session.add(new_stock)
-                db.session.commit()
-                return redirect('/')
-            except:
-                return 'There was an issue adding your task'
+            # new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
+            #                        name=company_info['name'] if 'name' in company_info else None)
+            # print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
+            # try:
+            #     db.session.add(new_stock)
+            #     db.session.commit()
+            #     return redirect('/')
+            # except:
+            #     return 'There was an issue adding your task'
     else:
-        stocks = TrackStock.query.order_by(TrackStock.price).all()
-        for stock in stocks:
-            db.session.delete(stock)
+        # stocks = TrackStock.query.order_by(TrackStock.price).all()
+        # for stock in stocks:
+        #     db.session.delete(stock)
+        stocks = None
         return render_template('index.html', stocks=stocks)
 
 
-@app.route('/delete/<id>')
-def delete(id):
-    ticker_to_delete = TrackStock.query.get_or_404(id)
-
-    try:
-        print(f"trying to delete {id}")
-        db.session.delete(ticker_to_delete)
-        db.session.commit()
-        return redirect('/')
-    except:
-        return
-
-@app.route('/top_movers')
-def add_top_movers():
-    tickers = smp.get_top_movers_yahoo()
-    if len(tickers) > 0:
-        freq = 1
-        for ticker in tickers[:15]:
-            if len(ticker) > 0:
-                price = smp.get_current_price_msn(ticker)
-                company_info = smp.get_company_info(ticker)
-                print(f"Adding {ticker} at price {price}")
-                new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
-                                       name=company_info['name'] if 'name' in company_info else None)
-                print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
-                try:
-                    db.session.add(new_stock)
-                except:
-                    return 'There was an issue adding your task'
-        db.session.commit()
-        return redirect('/')
-
-
-@app.route('/update/<id>', methods=['GET', 'POST'])
-def update(id):
-    stock = TrackStock.query.get_or_404(id)
-    print(f"ticker is {stock.ticker}")
-    if request.method == 'POST':
-        stock.price = smp.get_current_price_msn(request.form['ticker'])
-
-        try:
-            db.session.commit()
-            thread_ctrl.notify_all()
-            return redirect('/')
-        except:
-            return 'There was an issue updating your task'
-
-    else:
-        # return redirect('/')
-        stock_info = smp.load_financials(stock.ticker)
-        print(f"info is {str(stock_info)[:100]}")
-        return render_template('update.html', stock=stock, stock_info=stock_info)
+# @app.route('/delete/<id>')
+# def delete(id):
+#     ticker_to_delete = TrackStock.query.get_or_404(id)
+#
+#     try:
+#         print(f"trying to delete {id}")
+#         db.session.delete(ticker_to_delete)
+#         db.session.commit()
+#         return redirect('/')
+#     except:
+#         return
+#
+# @app.route('/top_movers')
+# def add_top_movers():
+#     tickers = smp.get_top_movers_yahoo()
+#     if len(tickers) > 0:
+#         freq = 1
+#         for ticker in tickers[:15]:
+#             if len(ticker) > 0:
+#                 price = smp.get_current_price_msn(ticker)
+#                 company_info = smp.get_company_info(ticker)
+#                 print(f"Adding {ticker} at price {price}")
+#                 new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
+#                                        name=company_info['name'] if 'name' in company_info else None)
+#                 print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
+#                 try:
+#                     db.session.add(new_stock)
+#                 except:
+#                     return 'There was an issue adding your task'
+#         db.session.commit()
+#         return redirect('/')
+#
+#
+# @app.route('/update/<id>', methods=['GET', 'POST'])
+# def update(id):
+#     stock = TrackStock.query.get_or_404(id)
+#     print(f"ticker is {stock.ticker}")
+#     if request.method == 'POST':
+#         stock.price = smp.get_current_price_msn(request.form['ticker'])
+#
+#         try:
+#             db.session.commit()
+#             thread_ctrl.notify_all()
+#             return redirect('/')
+#         except:
+#             return 'There was an issue updating your task'
+#
+#     else:
+#         # return redirect('/')
+#         stock_info = smp.load_financials(stock.ticker)
+#         print(f"info is {str(stock_info)[:100]}")
+#         return render_template('update.html', stock=stock, stock_info=stock_info)
 
 
 if __name__ == "__main__":

@@ -11,5 +11,5 @@ COPY static /static
 COPY templates /templates
 # COPY data /data
 COPY track_list.db /track_list.db
-COPY chromedriver /chromedriver
+# COPY chromedriver /chromedriver
 CMD gunicorn -b 0.0.0.0:5000 app:app
