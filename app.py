@@ -11,21 +11,24 @@ import smp
 from threading import Thread
 from threading import Condition
 from datetime import datetime as dt
+import logging
 
 app = Flask(__name__)
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///track_list.db'
 # db = SQLAlchemy(app)
 
+logger = logging.getLogger(__name__)
+
 TOP_MOVERS = "top_movers"
 
 
 def update_price(stock):
-    print(f"Updating {stock.ticker} {stock.price} {stock.last_checked}")
+    logger.info(f"Updating {stock.ticker} {stock.price} {stock.last_checked}")
     time_checked = dt.now()
     stock.price = smp.get_current_price_msn(stock.ticker)
     stock.last_checked = f"{time_checked.hour}:{time_checked.minute} {time_checked.day} {time_checked.month} {time_checked.year}"
     stock.last_check_display = datetime.utcnow()
-    print(f"New price {stock.ticker} {stock.price} {stock.last_checked}")
+    logger.info(f"New price {stock.ticker} {stock.price} {stock.last_checked}")
     return stock
 
 
@@ -51,22 +54,22 @@ def seconds_until_market_open():
     time_now = dt.now()
     t_min = time_now.minute
     t_hr = time_now.hour
-    print(f"Market hours {market_open['hour']}:{two_digit_number(market_open['minute'])} to {market_close['hour']}:"
+    logger.info(f"Market hours {market_open['hour']}:{two_digit_number(market_open['minute'])} to {market_close['hour']}:"
           f"{two_digit_number(market_close['minute'])}")
-    print(f"Checking current time {t_hr}:{t_min}")
+    logger.info(f"Checking current time {t_hr}:{t_min}")
     if market_open['hour'] < t_hr < market_close['hour']:
-        print("Open 1")
+        logger.info("Open 1")
         return 0
     if market_open['hour'] == t_hr and market_open['minute'] <= t_min:
-        print("Open 2")
+        logger.info("Open 2")
         return 0
     if market_close['hour'] == t_hr and market_close['minute'] >= t_min:
-        print("Open 3")
+        logger.info("Open 3")
         return 0
     hours = 0
     minutes = 0
     adjusted_hour = time_now.hour
-    print(f"time is {time_now.hour}:{two_digit_number(time_now.minute)}")
+    logger.info(f"time is {time_now.hour}:{two_digit_number(time_now.minute)}")
     if t_min > market_close['minute']:
         minutes += 60 - t_min
         minutes += market_open['minute']
@@ -77,7 +80,7 @@ def seconds_until_market_open():
         hours += 24 - adjusted_hour + market_open['hour']
     if adjusted_hour < market_open['hour']:
         hours += market_open['hour'] - adjusted_hour
-    print(f"market closed, waiting {hours} hours and {minutes} minutes")
+    logger.info(f"market closed, waiting {hours} hours and {minutes} minutes")
     return (minutes + hours * 60) * 60
 
 
@@ -101,17 +104,17 @@ def save_prices(ticker, frequency, prices, date, month=dt.now().month, year=dt.n
         filename = f"{ticker}_{month}_{year}_freq_{frequency}.csv"
         file_path = os.path.join(location, filename)
         if os.path.isfile(file_path):
-            print(f"File existing, saving without header")
+            logger.info(f"File existing, saving without header")
             prices.loc[[date]].to_csv(file_path, mode='a', header=False)
         else:
-            print(f"File not found, creating new")
+            logger.info(f"File not found, creating new")
             prices.to_csv(file_path)
     except Exception as e:
-        print(f"Error saving prices to file for {file_path}: {e}")
+        logger.info(f"Error saving prices to file for {file_path}: {e}")
 
 
 def alarm_worker(thread_num, frequency, ctrl):
-    print(f"Thread {thread_num} is alive")
+    logger.info(f"Thread {thread_num} is alive")
     last_save = 0
     need_commit = False
     first_time = True
@@ -161,18 +164,18 @@ def alarm_worker(thread_num, frequency, ctrl):
         else:
             time_left_in_minute = time.time() - start_time
             if time_left_in_minute > 60:
-                print(f"Too slow, time {time_left_in_minute} with {len(day_prices)} stocks")
+                logger.info(f"Too slow, time {time_left_in_minute} with {len(day_prices)} stocks")
                 raise Exception(f"Too slow, time {time_left_in_minute} with {len(day_prices)} stocks")
             else:
                 time.sleep(frequency * 60 - time_left_in_minute)
             seconds_to_open = seconds_until_market_open()
-            print(f"seconds to open {seconds_to_open}")
+            logger.info(f"seconds to open {seconds_to_open}")
             if seconds_to_open > 0:
                 if len(day_prices) > 0 or thread_num == "top_movers":
-                    # print backup just incase
-                    # print(day_prices)
+                    # logger.info backup just incase
+                    # logger.info(day_prices)
                     for stock_ticker in day_prices.keys():
-                        print(f"Thread {thread_num} is saving prices for {stock_ticker}")
+                        logger.info(f"Thread {thread_num} is saving prices for {stock_ticker}")
                         save_prices(stock_ticker, frequency, day_prices[stock_ticker], current_date)
                     seconds_to_open = seconds_until_market_open()
                     time.sleep(seconds_to_open)
@@ -180,18 +183,18 @@ def alarm_worker(thread_num, frequency, ctrl):
                     continue
         start_time = time.time()
         time_key = current_time_str()
-        print(f"Thread {thread_num} is running")
+        logger.info(f"Thread {thread_num} is running")
         if thread_num == TOP_MOVERS:
             # top movers thread
             # dataset rows of companies, columns of times, each set contains one day
             list_of_movers = smp.get_top_movers_yahoo()
-            print(f"Top movers at {time_key}: {str(list_of_movers)}")
+            logger.info(f"Top movers at {time_key}: {str(list_of_movers)}")
             try:
                 movers_df[time_key] = list_of_movers[:len(movers_df) if len(movers_df) > 0 else len(list_of_movers)]
             except Exception as e:
-                print(f"Error: {e}")
+                logger.info(f"Error: {e}")
             day_movers[time_key] = list_of_movers
-            print(f"movers df: {movers_df}")
+            logger.info(f"movers df: {movers_df}")
             movers_df.to_csv(os.path.join("data", f"movers_{current_date}.csv"))
             with open(os.path.join("data", f"movers_{current_date}.json"), 'w') as f:
                 f.write(json.dumps(day_movers, indent=2))
@@ -201,29 +204,29 @@ def alarm_worker(thread_num, frequency, ctrl):
             # stocks = TrackStock.query.filter(TrackStock.frequency == frequency).all()
             stocks = []
             if len(stocks) > 0:
-                print(f"Getting prices for {len(stocks)} thread {thread_num}")
+                logger.info(f"Getting prices for {len(stocks)} thread {thread_num}")
                 for stock in stocks:
-                    print(f"Checking {stock.ticker} thread {thread_num}")
+                    logger.info(f"Checking {stock.ticker} thread {thread_num}")
                 for stock in stocks:
                     try:
                         stock = update_price(stock)
                         need_commit = True
-                        print(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}\n")
+                        logger.info(f"{stock.ticker} updated ${stock.price} by thread {thread_num} with freq {frequency}\n")
                         if stock.ticker not in day_prices:
                             day_prices[stock.ticker] = blank_df.copy()
                         day_prices[stock.ticker].loc[current_date, time_key] = stock.price
-                        # print(day_prices)
+                        # logger.info(day_prices)
                     except:
-                        print(f"Error: Checking {stock.last_checked} with current time {time_key}")
+                        logger.info(f"Error: Checking {stock.last_checked} with current time {time_key}")
                 if need_commit:
                     # db.session.commit()
                     need_commit = False
-                print(f"Finished thread {thread_num}\n")
+                logger.info(f"Finished thread {thread_num}\n")
             else:
                 ctrl.acquire()
-                print(f"No stocks at freq {frequency}, waiting")
+                logger.info(f"No stocks at freq {frequency}, waiting")
                 ctrl.wait()
-                print(f"New stocks, checking")
+                logger.info(f"New stocks, checking")
 
 
 # initialize
@@ -235,23 +238,16 @@ with app.app_context():
     frequencies = [1, 5, 10, 15, 30, 60]
     price_threads = []
     thread_ctrl = Condition()
-    print(f"Initializing")
+    logger.info(f"Initializing")
     for i in range(len(frequencies)):
-        print(f"Starting thread {i}")
+        logger.info(f"Starting thread {i}")
         price_threads.append(Thread(target=alarm_worker, args=(i, frequencies[i], thread_ctrl), daemon=True).start())
     top_mover_thread = Thread(target=alarm_worker, args=(TOP_MOVERS, 5, thread_ctrl), daemon=True).start()
-
-# # signal.signal(signal.SIGALRM, _handle_minute_alarm)
-# signal.signal(signal.alarm(), _handle_minute_alarm)
-# while True:
-#     if dt.now().second == 0:
-#         signal.alarm(60)
-#         break
 
 
 @app.route('/track', methods=['POST', 'GET', 'PUT'])
 def track():
-    print(f"callback:\n{request}")
+    logger.info(f"callback:\n{request}")
     # with open(f"data/tda_{str(datetime.now())}.json", 'w') as fo:
     #     fo.write(json.dumps(request.json(), indent=2))
 
@@ -273,10 +269,10 @@ def index():
         if len(ticker) > 0:
             price = smp.get_current_price_msn(ticker)
             company_info = smp.get_company_info(ticker)
-            print(f"Adding {ticker} at price {price}")
+            logger.info(f"Adding {ticker} at price {price}")
             # new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
             #                        name=company_info['name'] if 'name' in company_info else None)
-            # print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
+            # logger.info(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
             # try:
             #     db.session.add(new_stock)
             #     db.session.commit()
@@ -296,7 +292,7 @@ def index():
 #     ticker_to_delete = TrackStock.query.get_or_404(id)
 #
 #     try:
-#         print(f"trying to delete {id}")
+#         logger.info(f"trying to delete {id}")
 #         db.session.delete(ticker_to_delete)
 #         db.session.commit()
 #         return redirect('/')
@@ -312,10 +308,10 @@ def index():
 #             if len(ticker) > 0:
 #                 price = smp.get_current_price_msn(ticker)
 #                 company_info = smp.get_company_info(ticker)
-#                 print(f"Adding {ticker} at price {price}")
+#                 logger.info(f"Adding {ticker} at price {price}")
 #                 new_stock = TrackStock(ticker=ticker, frequency=freq, price=price, last_checked=time.time(), \
 #                                        name=company_info['name'] if 'name' in company_info else None)
-#                 print(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
+#                 logger.info(f"Added {new_stock.ticker} {new_stock.last_checked} {new_stock.price}")
 #                 try:
 #                     db.session.add(new_stock)
 #                 except:
@@ -327,7 +323,7 @@ def index():
 # @app.route('/update/<id>', methods=['GET', 'POST'])
 # def update(id):
 #     stock = TrackStock.query.get_or_404(id)
-#     print(f"ticker is {stock.ticker}")
+#     logger.info(f"ticker is {stock.ticker}")
 #     if request.method == 'POST':
 #         stock.price = smp.get_current_price_msn(request.form['ticker'])
 #
@@ -341,7 +337,7 @@ def index():
 #     else:
 #         # return redirect('/')
 #         stock_info = smp.load_financials(stock.ticker)
-#         print(f"info is {str(stock_info)[:100]}")
+#         logger.info(f"info is {str(stock_info)[:100]}")
 #         return render_template('update.html', stock=stock, stock_info=stock_info)
 
 
