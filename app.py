@@ -251,7 +251,7 @@ def track():
     # with open(f"data/tda_{str(datetime.now())}.json", 'w') as fo:
     #     fo.write(json.dumps(request.json(), indent=2))
 
-    return {"status": "received"}, 200
+    return {"status": "received", "msg": request.json()}, 200
 
 
 @app.route('/', methods=['POST', 'GET'])
